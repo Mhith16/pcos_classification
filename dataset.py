@@ -127,7 +127,7 @@ def get_dataloaders():
         train_dataset, 
         batch_size=config.BATCH_SIZE, 
         shuffle=True, 
-        num_workers=4,
+        num_workers=2,
         pin_memory=True if torch.cuda.is_available() else False
     )
     
@@ -135,7 +135,7 @@ def get_dataloaders():
         val_dataset, 
         batch_size=config.BATCH_SIZE, 
         shuffle=False, 
-        num_workers=4,
+        num_workers=2,
         pin_memory=True if torch.cuda.is_available() else False
     )
     
@@ -143,7 +143,7 @@ def get_dataloaders():
         test_dataset, 
         batch_size=config.BATCH_SIZE, 
         shuffle=False, 
-        num_workers=4,
+        num_workers=2,
         pin_memory=True if torch.cuda.is_available() else False
     )
     
@@ -180,7 +180,7 @@ def get_cross_validation_folds():
             train_dataset, 
             batch_size=config.BATCH_SIZE, 
             shuffle=True, 
-            num_workers=4,
+            num_workers=2,
             pin_memory=True if torch.cuda.is_available() else False
         )
         
@@ -188,7 +188,7 @@ def get_cross_validation_folds():
             val_dataset, 
             batch_size=config.BATCH_SIZE, 
             shuffle=False, 
-            num_workers=4,
+            num_workers=2,
             pin_memory=True if torch.cuda.is_available() else False
         )
         

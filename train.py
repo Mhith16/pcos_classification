@@ -207,9 +207,17 @@ def train_model(run_id=None):
     
     # Unfreeze the last layers of the backbones
     model.unfreeze_backbones(unfreeze_percentage=0.3)
-    
+
+    # Define early stopping with the correct path
+    best_model_path = os.path.join(run_dir, 'best_model.pt')
+    early_stopping = EarlyStopping(
+        patience=config.EARLY_STOPPING_PATIENCE, 
+        verbose=True,
+        path=best_model_path
+    )
+
     # Reset early stopping
-    early_stopping = EarlyStopping(patience=config.EARLY_STOPPING_PATIENCE, verbose=True)
+    # early_stopping = EarlyStopping(patience=config.EARLY_STOPPING_PATIENCE, verbose=True)
     
     # Define optimizer for phase 2 with lower learning rate
     optimizer = optim.Adam(model.parameters(), lr=config.FINE_TUNING_LR)
@@ -301,7 +309,23 @@ def train_with_cross_validation():
         }
         
         # Define early stopping
-        early_stopping = EarlyStopping(patience=config.EARLY_STOPPING_PATIENCE, verbose=True)
+
+        # Create directories for this fold
+        fold_dir = os.path.join(config.OUTPUT_DIR, fold_run_id)
+        model_dir = os.path.join(fold_dir, "models")
+
+        os.makedirs(fold_dir, exist_ok=True)
+        os.makedirs(model_dir, exist_ok=True)
+
+        # Define early stopping with the correct path
+        best_model_path = os.path.join(fold_dir, 'best_model.pt')
+        early_stopping = EarlyStopping(
+            patience=config.EARLY_STOPPING_PATIENCE, 
+            verbose=True,
+            path=best_model_path
+        )
+
+        # early_stopping = EarlyStopping(patience=config.EARLY_STOPPING_PATIENCE, verbose=True)
         
         # Create directories for this fold
         fold_dir = os.path.join(config.OUTPUT_DIR, fold_run_id)
