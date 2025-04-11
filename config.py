@@ -38,8 +38,8 @@ DROPOUT_RATE = 0.1
 # Training settings
 INITIAL_LR = 1e-4
 FINE_TUNING_LR = 1e-5
-EPOCHS_PHASE1 = 20  # Training with frozen backbone
-EPOCHS_PHASE2 = 30  # Fine-tuning
+EPOCHS_PHASE1 = 10  # Training with frozen backbone
+EPOCHS_PHASE2 = 10  # Fine-tuning
 EARLY_STOPPING_PATIENCE = 10
 LR_REDUCTION_PATIENCE = 5
 LR_REDUCTION_FACTOR = 0.1
