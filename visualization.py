@@ -234,14 +234,30 @@ def plot_sample_predictions(model, test_loader, class_names, num_samples=16, sav
     else:
         plt.show()
 
-def generate_gradcam(model, img_tensor, target_layer_name, class_idx=0, save_path=None):
+def generate_gradcam(model, img_tensor, target_layer_name=None, class_idx=0, save_path=None):
     """Generate Grad-CAM visualization for the given image and layer."""
     # Put model in evaluation mode
     model.eval()
     
-    # Register hooks to get activations and gradients
+    # Storage for activations and gradients
     activations = {}
     gradients = {}
+    
+    # If no target layer is specified, try to find a suitable convolutional layer
+    if target_layer_name is None:
+        # Find last convolutional layer in each backbone
+        conv_layers = []
+        for name, module in model.named_modules():
+            if isinstance(module, torch.nn.Conv2d):
+                conv_layers.append(name)
+        
+        if conv_layers:
+            # Use the last convolutional layer found
+            target_layer_name = conv_layers[-1]
+            print(f"Automatically selected layer: {target_layer_name}")
+        else:
+            print("No convolutional layers found in model!")
+            return None
     
     def get_activation(name):
         def hook(model, input, output):
@@ -253,33 +269,82 @@ def generate_gradcam(model, img_tensor, target_layer_name, class_idx=0, save_pat
             gradients[name] = grad.detach()
         return hook
     
-    # Find the target layer
+    # Register hooks for the target layer
+    target_found = False
     for name, module in model.named_modules():
         if name == target_layer_name:
-            module.register_forward_hook(get_activation(target_layer_name))
+            # Register forward hook
+            handle = module.register_forward_hook(get_activation(target_layer_name))
+            # Register backward hook for gradient
+            if hasattr(module, 'weight') and module.weight is not None:
+                module.register_full_backward_hook(
+                    lambda m, grad_in, grad_out: gradients.update({target_layer_name: grad_out[0].detach()})
+                )
+            target_found = True
             break
+    
+    if not target_found:
+        print(f"Target layer '{target_layer_name}' not found in model.")
+        return None
     
     # Forward pass
     img_tensor = img_tensor.unsqueeze(0)  # Add batch dimension
-    output = model(img_tensor)
-    
-    # Get the gradient of the output with respect to the parameters of the model
     model.zero_grad()
-    output[0, class_idx].backward()
+    outputs = model(img_tensor)
+    
+    # For binary classification, handle the output differently
+    if outputs.shape[1] if len(outputs.shape) > 1 else 1 == 1:
+        # Binary classification (sigmoid output)
+        target = outputs
+    else:
+        # Multi-class (softmax output)
+        target = outputs[:, class_idx]
+    
+    # Backward pass to get gradients
+    target.backward()
+    
+    # Check if activations and gradients are captured
+    if target_layer_name not in activations:
+        print(f"No activations captured for layer '{target_layer_name}'!")
+        return None
+    
+    # For binary classification with one output, we might not get gradients in the standard way
+    # In this case, we'll calculate them differently
+    if target_layer_name not in gradients:
+        print(f"No gradients found for layer {target_layer_name}, using alternative approach...")
+        # Try to find gradients for the layer's parameters
+        for name, module in model.named_modules():
+            if name == target_layer_name and hasattr(module, 'weight') and module.weight.grad is not None:
+                # Use parameter gradients as a proxy
+                gradients[target_layer_name] = module.weight.grad
+                break
+    
+    # If still no gradients, return None
+    if target_layer_name not in gradients:
+        print(f"Still no gradients for {target_layer_name}. Trying another layer might help.")
+        return None
     
     # Get activations and gradients
     activations_value = activations[target_layer_name]
-    if target_layer_name in gradients:
-        gradients_value = gradients[target_layer_name]
+    gradients_value = gradients[target_layer_name]
+    
+    # Different handling depending on gradient shape (could be parameter gradients or feature map gradients)
+    if len(gradients_value.shape) == 4:  # Feature map gradients
+        # Global average pooling of gradients
+        weights = torch.mean(gradients_value, dim=(2, 3), keepdim=True)
+        
+        # Weight the channels by gradients
+        cam = torch.sum(weights * activations_value, dim=1, keepdim=True)
+    elif len(gradients_value.shape) == 2:  # Parameter gradients (weights)
+        # Create weights from parameter gradients
+        weights = torch.mean(gradients_value, dim=1, keepdim=True)
+        
+        # Apply weights to activations (adjust dimensions as needed)
+        cam = torch.matmul(weights.t(), activations_value.reshape(activations_value.size(1), -1))
+        cam = cam.reshape(1, 1, activations_value.size(2), activations_value.size(3))
     else:
-        print(f"No gradients found for layer {target_layer_name}!")
+        print(f"Unexpected gradient shape: {gradients_value.shape}")
         return None
-    
-    # Global average pooling of gradients
-    weights = torch.mean(gradients_value, dim=(2, 3), keepdim=True)
-    
-    # Weight the channels by gradients
-    cam = torch.sum(weights * activations_value, dim=1, keepdim=True)
     
     # Apply ReLU and normalize
     cam = torch.relu(cam)
@@ -328,6 +393,9 @@ def generate_gradcam(model, img_tensor, target_layer_name, class_idx=0, save_pat
         plt.close()
     else:
         plt.show()
+    
+    # Clean up hook
+    handle.remove()
     
     return superimposed
 

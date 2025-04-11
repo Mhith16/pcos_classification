@@ -119,24 +119,60 @@ def visualize_model_predictions(run_id, fold=1, num_samples=16):
         if count >= 4:
             break
     
-    # Find a suitable convolutional layer for each backbone
-    target_layers = [
-        "feature_extractors.0.features.28",  # VGG16 last conv
-        "feature_extractors.1.Mixed_7c",     # InceptionV3 last mixed
-        "feature_extractors.2.features.denseblock4" # DenseNet last dense block
-    ]
+    # Find convolutional layers automatically
+    conv_layers = []
+    for name, module in model.named_modules():
+        if isinstance(module, torch.nn.Conv2d):
+            conv_layers.append(name)
     
-    # Generate GradCAM for each sample
-    for i, (sample, label) in enumerate(zip(samples, labels)):
-        for j, layer_name in enumerate(target_layers):
-            save_path = os.path.join(grad_cam_dir, f'gradcam_sample{i+1}_backbone{j+1}.png')
-            generate_gradcam(
-                model, 
-                sample.to(config.DEVICE),
-                layer_name,
-                class_idx=0,  # For binary classification, we can use class 0
-                save_path=save_path
-            )
+    # Choose a few key layers if available
+    if conv_layers:
+        # Try to find one conv layer from each backbone
+        key_layers = []
+        backbone_prefixes = [
+            "feature_extractors.0",  # VGG
+            "feature_extractors.1",  # Inception
+            "feature_extractors.2"   # DenseNet
+        ]
+        
+        for prefix in backbone_prefixes:
+            # Find the last conv layer for each backbone
+            for layer in reversed(conv_layers):
+                if layer.startswith(prefix):
+                    key_layers.append(layer)
+                    break
+        
+        # If no specific backbone layers found, use any last conv layer
+        if not key_layers:
+            key_layers = [conv_layers[-1]]
+        
+        print(f"Using convolutional layers for GradCAM: {key_layers}")
+        
+        # Generate GradCAM for each sample
+        for i, (sample, label) in enumerate(zip(samples, labels)):
+            for j, layer_name in enumerate(key_layers):
+                backbone_name = "unknown"
+                if "feature_extractors.0" in layer_name:
+                    backbone_name = "vgg16"
+                elif "feature_extractors.1" in layer_name:
+                    backbone_name = "inception_v3"
+                elif "feature_extractors.2" in layer_name:
+                    backbone_name = "densenet201"
+                
+                save_path = os.path.join(grad_cam_dir, f'gradcam_sample{i+1}_{backbone_name}.png')
+                
+                try:
+                    generate_gradcam(
+                        model, 
+                        sample.to(config.DEVICE),
+                        layer_name,
+                        class_idx=0,  # For binary classification
+                        save_path=save_path
+                    )
+                except Exception as e:
+                    print(f"Error generating GradCAM for layer {layer_name}: {e}")
+    else:
+        print("No convolutional layers found in model. Cannot generate GradCAM.")
 
 def visualize_feature_activations(run_id, fold=1):
     """Visualize feature activations from different layers."""
