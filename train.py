@@ -25,7 +25,7 @@ def train_epoch(model, train_loader, criterion, optimizer, device):
     
     # Create progress bar
     pbar = tqdm(train_loader, desc='Training')
-    print(config.DEVICE)
+    # print(config.DEVICE)
     
     for inputs, targets in pbar:
         # Move to device

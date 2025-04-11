@@ -19,7 +19,7 @@ DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 # Data settings
 IMG_SIZE = (299, 299)
-BATCH_SIZE = 16
+BATCH_SIZE = 8
 VALIDATION_SPLIT = 0.2
 TEST_SPLIT = 0.1
 
